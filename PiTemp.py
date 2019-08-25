@@ -14,6 +14,42 @@ username='USERNAME'
 ssopass='PASSWORD'
 HOST='HOST'
 cr='\n'
+#time in min used to delay power off = offset
+offset=5
+TIMEDELTA=datetime.timedelta(minutes=offset)
+#Pi's Lat and Long
+LAT='35'
+LONG='-78'
+
+o=ephem.Observer()
+o.lat=LAT
+o.long=LONG
+s=ephem.Sun()
+s.compute()
+SUNSET=ephem.localtime(o.next_setting(s))
+SUNSETHR=SUNSET.hour
+SUNSETMIN=SUNSET.minute
+
+
+def TimeCalc():
+        global TIME,nHR,nMIN
+        TIME=datetime.datetime.now()
+        nHR=(TIME+TIMEDELTA).hour
+        nMIN=(TIME+TIMEDELTA).minute
+        return TIME,nHR,nMIN
+
+
+def COMPARETEMP(MAXTEMP):
+        READOUT = os.popen('vcgencmd measure_temp').readline()
+        CPU=float(filter(str.isdigit, READOUT))/10
+        print str(CPU)
+        if CPU < MAXTEMP:
+                print 'temp is ok'
+        else:
+                print 'TEMP IS HIGH, shutting down'
+		TimeCalc()
+		shell(HOST)
+                os.popen('sudo halt')
 
 
 #This cust def logs into the last hop device and pulls information
@@ -67,4 +103,21 @@ def shell(host):
 		pass
 	print removeINToutput
 
-shell(HOST)
+        #Set interface command
+        try:
+                remote_conn.send('conf t'+cr)
+                time.sleep(1)
+                remote_conn.send('int gi1/0/5'+cr)
+                time.sleep(1)
+		remote_conn.send('energywise level 10 recurrence importance 90 at %d %d * * 1-7' % (SUNSETMIN, SUNSETHR)+cr)
+		remote_conn.send('energywise level 0 recurrence importance 90 at %d %d * * 1-7' % (nMIN, nHR)+cr)
+                time.sleep(1)
+                setINToutput=remote_conn.recv(5000)
+        except:
+                pass
+        print setINToutput
+
+while True:
+        COMPARETEMP(MAXTEMP)
+        time.sleep(60)
+
